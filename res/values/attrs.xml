@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources>
+    <declare-styleable name="com.kx3panadapterfft.VisualizerView">
+        <attr name="blockSize" format="integer"/>
+        <attr name="frequency" format="integer"/>
+    </declare-styleable>
+</resources>

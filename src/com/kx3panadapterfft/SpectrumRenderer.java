@@ -118,8 +118,8 @@ public class SpectrumRenderer {
 		}
 
 		myPaint.setColor(Color.YELLOW);
-		canvas.drawText(Integer.toString(rate), border + tick + 40, border + tick + 10, myPaint);
-		canvas.drawText(Integer.toString(data.length / 2), border + tick + 80, border + tick + 10, myPaint);
+		canvas.drawText(Integer.toString(rate)+" bw", border + tick + 40, border + tick + 10, myPaint);
+		canvas.drawText(Integer.toString(data.length / 2)+" bins", border + tick + 120, border + tick + 10, myPaint);
 
 		// scroll down
 		waterfall.getPixels(waterfallPixels, 0, (int) waterfallWidth, 0, 0, (int) waterfallWidth, (int) waterfallHeight - 1);

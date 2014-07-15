@@ -2,4 +2,7 @@
 <resources>
     <string name="app_name">KX3 Panadapter FFT</string>
     <string name="panadapter">Panadapter</string>
+    <string name="refreshing">Refreshing&#8230;</string>
+    <string name="kx3connection">KX3 Connection</string>
+    <string name="noconnectivity">No Connectivity</string>
 </resources>

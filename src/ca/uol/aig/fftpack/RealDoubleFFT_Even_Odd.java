@@ -62,7 +62,8 @@ public class RealDoubleFFT_Even_Odd extends RealDoubleFFT_Mixed
 /*----------------------------------------------------------------------
    cosqf1: further processing of forward cos-FFT with odd wave numbers.
   ----------------------------------------------------------------------*/
-     void cosqf1(int n, double x[], double wtable[])
+     @SuppressWarnings("unused")
+	void cosqf1(int n, double x[], double wtable[])
      {
          int     modn, i, k;
          int     kc, np2, ns2;

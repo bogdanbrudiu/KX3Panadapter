@@ -296,7 +296,8 @@ class ComplexDoubleFFT_Mixed
    passfg: Complex FFT's forward/backward processing of general factor;
    isign is +1 for backward and -1 for forward transforms
   ----------------------------------------------------------------------*/
-     void passfg(int nac[], int ido, int ip, int l1, int idl1,
+     @SuppressWarnings("unused")
+	void passfg(int nac[], int ido, int ip, int l1, int idl1,
                        final double cc[], double c1[], double c2[], double ch[], double ch2[],
                        final double wtable[], int offset, int isign)
      {

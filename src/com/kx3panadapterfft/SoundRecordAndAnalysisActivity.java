@@ -1,10 +1,14 @@
 package com.kx3panadapterfft;
 
 import java.io.File;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
+import java.io.IOException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -20,9 +24,12 @@ import android.widget.ImageView;
 import android.widget.Toast;
 import ca.uol.aig.fftpack.ComplexDoubleFFT;
 
+import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.kx3panadapterfft.wav.WavFile;
 
 public class SoundRecordAndAnalysisActivity extends Activity {
+	private static final String TAG = "SoundRecordAndAnalysisActivity";
 	public static final boolean MIC = false;
 	public static final boolean PLAYBACK = false;
 	public static final boolean STEREO = true;
@@ -37,13 +44,46 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 	private final int channelConfiguration = AudioFormat.CHANNEL_CONFIGURATION_STEREO;
 	private final int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
 	private final int blockSize = 1024;
+	private VisualizerView visualizerView;
+	
+	private static UsbSerialDriver sDriver;
+	private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
+	 private SerialInputOutputManager mSerialIoManager;
 
+	    private final SerialInputOutputManager.Listener mListener =
+	            new SerialInputOutputManager.Listener() {
+
+	        @Override
+	        public void onRunError(Exception e) {
+	            Log.d(TAG, "Runner stopped.");
+	        }
+
+	        @Override
+	        public void onNewData(final byte[] data) {
+	        	visualizerView.updateVisualizer(0d,0d);
+	        }
+	    };
+	
+	 /**
+     * Starts the activity, using the supplied driver instance.
+     *
+     * @param context
+     * @param driver
+     */
+    static void show(Context context, UsbSerialDriver driver) {
+    	SoundRecordAndAnalysisActivity.sDriver = driver;
+        final Intent intent = new Intent(context, SoundRecordAndAnalysisActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NO_HISTORY);
+        context.startActivity(intent);
+    }
+	
 	/** Called when the activity is first created. */
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.main);
-		VisualizerView visualizerView = (VisualizerView) findViewById(R.id.visualizerView);
+	
+		visualizerView = (VisualizerView) findViewById(R.id.visualizerView);
 		visualizerView.init(blockSize, rate);
 	}
 
@@ -73,21 +113,85 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 
 			recordTask = new RecordAudio();
 			recordTask.execute();
+
 		}
 	}
+	
+	
+	@Override
+    protected void onPause() {
+        super.onPause();
+        stopIoManager();
+        if (sDriver != null) {
+            try {
+                sDriver.close();
+            } catch (IOException e) {
+                // Ignore.
+            }
+            sDriver = null;
+        }
+        finish();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Log.d(TAG, "Resumed, sDriver=" + sDriver);
+        if (sDriver == null) {
+            
+        } else {
+            try {
+                sDriver.open();
+                sDriver.setBaudRate(38400);
+            } catch (IOException e) {
+                Log.e(TAG, "Error setting up device: " + e.getMessage(), e);
+             
+                try {
+                    sDriver.close();
+                } catch (IOException e2) {
+                    // Ignore.
+                }
+                sDriver = null;
+                return;
+            }
+        }
+        onDeviceStateChange();
+    }
+
+    private void stopIoManager() {
+        if (mSerialIoManager != null) {
+            Log.i(TAG, "Stopping io manager ..");
+            mSerialIoManager.stop();
+            mSerialIoManager = null;
+        }
+    }
+
+    private void startIoManager() {
+        if (sDriver != null) {
+            Log.i(TAG, "Starting io manager ..");
+            mSerialIoManager = new SerialInputOutputManager(sDriver, mListener);
+            mExecutor.submit(mSerialIoManager);
+        }
+    }
+
+    private void onDeviceStateChange() {
+        stopIoManager();
+        startIoManager();
+    }
+	
 
 	private class RecordAudio extends AsyncTask<Void, double[], Void> {
 		private static final String TAG = "RecordAudio";
 
 		private final ComplexDoubleFFT complexTransformer;
-		private final VisualizerView visualizerViewisualizerView;
+		
 
 		public RecordAudio() {
 			complexTransformer = new ComplexDoubleFFT(blockSize / 2);
-			this.visualizerViewisualizerView = (VisualizerView) findViewById(R.id.visualizerView);
+			
 		}
 
-		@Override
+		@SuppressLint("SdCardPath") @Override
 		protected Void doInBackground(Void... params) {
 
 			if (isCancelled()) {
@@ -226,13 +330,7 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 
 		}
 
-		private short[] byteArrayToShortArray(byte[] data) {
-			short[] result = new short[data.length / 2];
-			for (int j = 0; j < data.length / 2; j = j + 2) {
-				result[j] = ByteBuffer.wrap(data, j, 2).order(ByteOrder.LITTLE_ENDIAN).getShort();
-			}
-			return result;
-		}
+		
 
 		private double[] shortArrayToDoubleArray(short[] data) {
 			double[] result = new double[data.length];
@@ -257,7 +355,7 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 
 		@Override
 		protected void onProgressUpdate(double[]... toTransform) {
-			visualizerViewisualizerView.updateVisualizer(toTransform[0]);
+			visualizerView.updateVisualizer(toTransform[0]);
 		}
 
 	}

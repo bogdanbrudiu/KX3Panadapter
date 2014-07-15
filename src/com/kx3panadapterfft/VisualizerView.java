@@ -14,6 +14,8 @@ public class VisualizerView extends View {
 	private Bitmap mCanvasBitmap;
 	private Canvas mCanvas;
 	private double[] fftData;
+	private double freqA;
+	private double freqB;
 	private int blockSize;
 	private int rate;
 	private SpectrumRenderer spectrumRenderer;
@@ -55,6 +57,13 @@ public class VisualizerView extends View {
 				this.fftData[i] = fftData[i - (fftData.length / 2)];
 			}
 		}
+
+		invalidate();
+	}
+	public void updateVisualizer(double freqA, double freqB) {
+
+		this.freqA=freqA;
+		this.freqB=freqB;
 
 		invalidate();
 	}

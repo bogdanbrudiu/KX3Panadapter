@@ -2,6 +2,7 @@ package com.kx3panadapterfft;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -12,6 +13,8 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.hardware.usb.UsbDevice;
+import android.hardware.usb.UsbManager;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -23,16 +26,18 @@ import android.util.Log;
 import android.widget.ImageView;
 import android.widget.Toast;
 import ca.uol.aig.fftpack.ComplexDoubleFFT;
+import ca.uol.aig.fftpack.RealDoubleFFT;
 
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
+import com.hoho.android.usbserial.driver.UsbSerialProber;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 import com.kx3panadapterfft.wav.WavFile;
 
 public class SoundRecordAndAnalysisActivity extends Activity {
 	private static final String TAG = "SoundRecordAndAnalysisActivity";
-	public static final boolean MIC = false;
+	public static final boolean MIC = true;
 	public static final boolean PLAYBACK = false;
-	public static final boolean STEREO = true;
+	public static boolean STEREO=true;
 	RecordAudio recordTask;
 	ImageView imageViewDisplaySectrum;
 	Bitmap bitmapDisplaySpectrum;
@@ -40,13 +45,15 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 
 	Paint paintSpectrumDisplay;
 	private long backPressedTime = 0; // used by onBackPressed()
-	private final int rate = 44100;
-	private final int channelConfiguration = AudioFormat.CHANNEL_CONFIGURATION_STEREO;
+	private int rate = 44100;
+	private final int channelConfiguration = AudioFormat.CHANNEL_IN_DEFAULT;
 	private final int audioEncoding = AudioFormat.ENCODING_PCM_16BIT;
-	private final int blockSize = 1024;
+	private int blockSize = 1024;
 	private VisualizerView visualizerView;
 	
-	private static UsbSerialDriver sDriver;
+	public static UsbSerialDriver sDriver;
+	public static String usbDevice;
+	
 	private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
 	 private SerialInputOutputManager mSerialIoManager;
 
@@ -60,37 +67,69 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 
 	        @Override
 	        public void onNewData(final byte[] data) {
-	        	visualizerView.updateVisualizer(0d,0d);
+	        	/*
+	        	RSP format: IF[f]*****+yyyyrx*00tmvspbd1*; where the fields are defined as follows: 
+	        		 
+	        		[f] Operating frequency, excluding any RIT/XIT offset (11 digits; see FA command format) 
+	        		* represents a space (BLANK, or ASCII 0x20) 
+	        		+ either "+" or "-" (sign of RIT/XIT offset) 
+	        		yyyy RIT/XIT offset in Hz (range is -9999 to +9999 Hz when computer-controlled) 
+	        		r 1 if RIT is on, 0 if off 
+	        		x 1 if XIT is on, 0 if off 
+	        		t 1 if the K3 is in transmit mode, 0 if receive 
+	        		m operating mode (see MD command) 
+	        		v receive-mode VFO selection, 0 for VFO A, 1 for VFO B 
+	        		s 1 if scan is in progress, 0 otherwise 
+	        		p 1 if the transceiver is in split mode, 0 otherwise 
+	        		b Basic RSP format: always 0; K2 Extended RSP format (K22): 1 if present IF response 
+	        		is due to a band change; 0 otherwise 
+	        		 d Basic RSP format: always 0; K3 Extended RSP format (K31): DATA sub-mode, 
+	        		if applicable (0=DATA A, 1=AFSK A, 2= FSK D, 3=PSK D) 
+*/
+	        	
+	        	String str="";
+				try {
+					str = new String(data, "UTF-8");
+				} catch (UnsupportedEncodingException e) {
+					 Log.e(TAG, e.getMessage());
+				}
+	        	if(str.startsWith("IF")){
+	        		final double freq=Double.parseDouble(str.substring(2, str.indexOf(' ')>0?str.indexOf(' '):str.length()));
+	        		runOnUiThread(new Runnable() {
+		        	     @Override
+		        	     public void run() {
+
+		        	    	 visualizerView.updateVisualizer(freq,0d);
+
+		        	    }
+		        	});
+	        	}
+	        	
+	        	
 	        }
 	    };
 	
-	 /**
-     * Starts the activity, using the supplied driver instance.
-     *
-     * @param context
-     * @param driver
-     */
-    static void show(Context context, UsbSerialDriver driver) {
-    	SoundRecordAndAnalysisActivity.sDriver = driver;
-        final Intent intent = new Intent(context, SoundRecordAndAnalysisActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NO_HISTORY);
-        context.startActivity(intent);
-    }
 	
+	private void init(){
+		
+		if (recordTask != null) {
+			recordTask.init();
+		}
+	
+	}
 	/** Called when the activity is first created. */
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.main);
+		init();
 	
-		visualizerView = (VisualizerView) findViewById(R.id.visualizerView);
-		visualizerView.init(blockSize, rate);
 	}
 
 	@Override
 	public void onBackPressed() {
 
-		super.onBackPressed();
+	
 
 		long t = System.currentTimeMillis();
 		if (t - backPressedTime > 2000) { // 2 secs
@@ -101,22 +140,39 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 			if (recordTask != null) {
 				recordTask.cancel(true);
 			}
-			super.onBackPressed(); // bye
+			//super.onBackPressed(); // bye
+			  Intent intent = new Intent(Intent.ACTION_MAIN);
+		        intent.addCategory(Intent.CATEGORY_HOME);
+		        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+		        startActivity(intent);
 		}
 
 	}
 
 	@Override
+	public void onStop(){
+		super.onStop();
+		if (recordTask != null) {
+			recordTask.cancel(true);
+		}
+	}
+	@Override
 	public void onStart() {
 		super.onStart();
+		if(SoundRecordAndAnalysisActivity.usbDevice==null){
+			 final Intent intent = new Intent(this, DeviceListActivity.class);
+		     //intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NO_HISTORY);
+		     this.startActivity(intent);
+		}else{
+		
 		if (recordTask == null) {
 
 			recordTask = new RecordAudio();
 			recordTask.execute();
 
 		}
+		}
 	}
-	
 	
 	@Override
     protected void onPause() {
@@ -170,7 +226,18 @@ public class SoundRecordAndAnalysisActivity extends Activity {
         if (sDriver != null) {
             Log.i(TAG, "Starting io manager ..");
             mSerialIoManager = new SerialInputOutputManager(sDriver, mListener);
+           
             mExecutor.submit(mSerialIoManager);
+            try {
+				sDriver.write("IF;".getBytes(), 1000);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+            //mSerialIoManager.writeAsync("FA00001550000;MD5;FA00001550000;".getBytes());
+            //mSerialIoManager.writeAsync("IF;".getBytes());
+            
+
         }
     }
 
@@ -178,17 +245,60 @@ public class SoundRecordAndAnalysisActivity extends Activity {
         stopIoManager();
         startIoManager();
     }
-	
+
+    @Override
+    public void onSaveInstanceState(Bundle savedInstanceState) {
+      super.onSaveInstanceState(savedInstanceState);
+
+      savedInstanceState.putString("usbDevice", usbDevice);
+    
+    }
+    @Override
+    public void onRestoreInstanceState(Bundle savedInstanceState) {
+      super.onRestoreInstanceState(savedInstanceState);
+    
+      usbDevice = savedInstanceState.getString("usbDevice");
+      UsbManager mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+      for (final UsbDevice device : mUsbManager.getDeviceList().values()) {
+    	  if(device.getDeviceName()==usbDevice){
+    		  sDriver = UsbSerialProber.acquire(mUsbManager, device);
+    	  }
+      }
+    }
 
 	private class RecordAudio extends AsyncTask<Void, double[], Void> {
 		private static final String TAG = "RecordAudio";
 
-		private final ComplexDoubleFFT complexTransformer;
-		
+		private ComplexDoubleFFT complexTransformer;
+		private RealDoubleFFT realTransformer;
+		short[] playBuffer;
+
+		short[] buffer;
+		double[] doubleBuffer;
+		double[] toTransform ;
+
+		protected void init(){
+			if(STEREO){
+				complexTransformer = new ComplexDoubleFFT(blockSize / 2);
+				realTransformer=null;
+			}else{
+				realTransformer = new RealDoubleFFT(blockSize);
+				complexTransformer=null;
+			}
+			if (PLAYBACK) {
+				playBuffer = new short[blockSize * 10];
+			}
+			buffer = new short[blockSize];
+			doubleBuffer = new double[blockSize];
+			toTransform = new double[doubleBuffer.length];
+			
+			
+			visualizerView = (VisualizerView) findViewById(R.id.visualizerView);
+			visualizerView.init(blockSize, rate);
+		}
 
 		public RecordAudio() {
-			complexTransformer = new ComplexDoubleFFT(blockSize / 2);
-			
+			init();
 		}
 
 		@SuppressLint("SdCardPath") @Override
@@ -207,8 +317,22 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 			WavFile wavFile;
 
 			if (MIC) {
-				audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, rate, channelConfiguration, audioEncoding,
-						AudioRecord.getMinBufferSize(rate, channelConfiguration, audioEncoding));
+				int bufferSize=blockSize;
+				 for (int myRate : new int[] {44100, 22050, 11025, 8000}) {  // add the rates you wish to check against
+					 bufferSize = AudioRecord.getMinBufferSize(myRate, channelConfiguration, audioEncoding);
+				        if (bufferSize > 0) {
+				            // buffer size is valid, Sample rate supported
+				        	rate=myRate;
+				        	blockSize=Math.min(blockSize,bufferSize/2);
+				        	break;
+				        }
+				    }
+				audioRecord = new AudioRecord(MediaRecorder.AudioSource.DEFAULT, rate, channelConfiguration, audioEncoding,	bufferSize);
+				if(audioRecord.getChannelConfiguration()!=AudioFormat.CHANNEL_IN_STEREO){
+					STEREO=false;
+				}
+				init();
+				
 			} else {
 
 				// File file = new File("/storage/sdcard1/sdr2.wav");
@@ -225,19 +349,8 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 					return null;
 				}
 			}
-			short[] playBuffer;
-
-			short[] buffer;
-			double[] doubleBuffer;
-			if (STEREO) {
-				if (PLAYBACK) {
-					playBuffer = new short[blockSize * 10];
-				}
-				buffer = new short[blockSize];
-				doubleBuffer = new double[blockSize];
-			}
-
-			double[] toTransform = new double[doubleBuffer.length];
+		
+		
 
 			try {
 				if (MIC) {
@@ -253,8 +366,14 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 			while (!isCancelled()) {
 				int framesRead;
 				if (MIC) {
-					framesRead = audioRecord.read(buffer, 0, blockSize);
-					framesRead = framesRead / 2;
+					if(STEREO){
+						framesRead = audioRecord.read(buffer, 0, blockSize/2);
+						framesRead = framesRead / 2;
+					}else{
+						framesRead = audioRecord.read(buffer, 0, blockSize);
+					}
+					
+
 					doubleBuffer = shortArrayToDoubleArray(buffer);
 				} else {
 					try {
@@ -286,12 +405,12 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 
 				doubleBuffer = applyHanningWindow(doubleBuffer);
 				// double[] doubleBuffer = shortArrayToDoubleArray(buffer);
-
+				if(STEREO){
 				double[] doubleBufferLeft = new double[doubleBuffer.length / 2];
 				double[] doubleBufferRight = new double[doubleBuffer.length / 2];
 
 				// double[] doubleBuffer = shortArrayToDoubleArray(buffer);
-				if (STEREO) {
+
 					for (int i = 0; i < doubleBuffer.length; i++) {
 						if (i % 2 == 0) {
 							doubleBufferLeft[i / 2] = doubleBuffer[i];
@@ -299,14 +418,26 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 							doubleBufferRight[i / 2] = doubleBuffer[i];
 						}
 					}
-				}
 
+				
 				for (int i = 0; i < Math.min(blockSize, framesRead); i++) {
-					toTransform[i * 2] = doubleBufferLeft[i];// / 32768.0;
-					toTransform[i * 2 + 1] = doubleBufferRight[i];// / 32768.0;
-				}
+					
+						toTransform[i * 2] = doubleBufferLeft[i];// / 32768.0;
+						toTransform[i * 2 + 1] = doubleBufferRight[i];// / 32768.0;
+					}
+				}else{
+					
+					for (int i = 0; i < Math.min(blockSize, framesRead); i++) {
+						
+							toTransform[i] = doubleBuffer[i];
 
-				complexTransformer.ft(toTransform);
+						}
+				}
+					if(STEREO){
+						complexTransformer.ft(toTransform);
+					}else{
+						realTransformer.ft(toTransform);
+					}
 
 				publishProgress(toTransform);
 
@@ -330,13 +461,19 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 
 		}
 
-		
+		  @Override
+		    protected void onCancelled() {
+			  Log.e(TAG, "Stoping");
+		    }
 
 		private double[] shortArrayToDoubleArray(short[] data) {
 			double[] result = new double[data.length];
 
 			for (int j = 0; j < data.length; j++) {
-				result[j] = data[j];
+				result[j] = data[j]/(Math.pow(2, 16)/2);
+				if(result[j]>1 || result[j]<-1){
+					Log.d(TAG, " "+result[j]);
+				}
 			}
 			return result;
 		}

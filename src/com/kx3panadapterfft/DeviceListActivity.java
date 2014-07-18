@@ -2,6 +2,7 @@ package com.kx3panadapterfft;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.AsyncTask;
@@ -31,7 +32,7 @@ import java.util.List;
 public class DeviceListActivity extends Activity {
 
     private final String TAG = DeviceListActivity.class.getSimpleName();
-	private long backPressedTime = 0; // used by onBackPressed()
+
     private UsbManager mUsbManager;
     private ListView mListView;
     private TextView mProgressBarTitle;
@@ -124,7 +125,7 @@ public class DeviceListActivity extends Activity {
 
                 final DeviceEntry entry = mEntries.get(position);
                 if(entry.device==null){
-                	showConsoleActivity(null);
+                	showConsoleActivity(null,null);
                 }
                 final UsbSerialDriver driver = entry.driver;
                 if (driver == null) {
@@ -132,7 +133,7 @@ public class DeviceListActivity extends Activity {
                     return;
                 }
 
-                showConsoleActivity(driver);
+                showConsoleActivity(entry.device.getDeviceName(), driver );
             }
         });
     }
@@ -195,25 +196,14 @@ public class DeviceListActivity extends Activity {
         mProgressBar.setVisibility(View.INVISIBLE);
     }
 
-    private void showConsoleActivity(UsbSerialDriver driver) {
-    	SoundRecordAndAnalysisActivity.show(this, driver);
+    private void showConsoleActivity(String usbDevice, UsbSerialDriver driver) {
+    	SoundRecordAndAnalysisActivity.usbDevice=usbDevice==null?"":usbDevice;
+    	SoundRecordAndAnalysisActivity.sDriver=driver;
+    	 Intent intent = new Intent(this, SoundRecordAndAnalysisActivity.class);
+         startActivity(intent);
+         finish();
     }
-    
-    @Override
-	public void onBackPressed() {
-
-		super.onBackPressed();
-
-		long t = System.currentTimeMillis();
-		if (t - backPressedTime > 2000) { // 2 secs
-			backPressedTime = t;
-			Toast.makeText(this, "Press back again to exit", Toast.LENGTH_SHORT).show();
-		} else { // this guy is serious
-			// clean up
-		
-			super.onBackPressed(); // bye
-		}
-
-	}
+   
+	
 
 }

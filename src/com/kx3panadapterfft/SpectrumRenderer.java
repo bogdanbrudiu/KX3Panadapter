@@ -1,11 +1,14 @@
 package com.kx3panadapterfft;
 
+import java.text.DecimalFormat;
+
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 
 public class SpectrumRenderer {
 
@@ -39,10 +42,11 @@ public class SpectrumRenderer {
 
 	}
 
-	public void render(Canvas canvas, double[] data) {
+	public void render(Canvas canvas, double[] data, double freqA) {
 		float min = 10000;
 		float max = -10000;
 
+		int scaleStep=2000;
 		float spectrumWidth = (canvas.getWidth() - 2 * (border)) - tick;
 		float spectrumHeight = ((canvas.getHeight() - 2 * (border)) / 3) - tick;
 		float waterfallWidth = (canvas.getWidth() - 2 * (border)) - tick;
@@ -66,11 +70,19 @@ public class SpectrumRenderer {
 		if (spectrumPoints == null)
 			spectrumPoints = new float[(int) spectrumWidth * 2];
 
+		Paint textpaint = new Paint(); 
+
+		textpaint.setColor(Color.YELLOW); 
+		textpaint.setTextSize(16); 
+		textpaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+		
 		Paint myPaint = new Paint();
 		// clear spectrum
 		myPaint.setColor(android.graphics.Color.BLACK);
 		myPaint.setStyle(Paint.Style.FILL);
 		canvas.drawRect(spectrumTopX, spectrumTopY, spectrumBottomX, spectrumBottomY, myPaint);
+		canvas.drawRect(0, 0, border, spectrumWidth, myPaint);
+		
 
 		// plot border
 		myPaint.setColor(Color.WHITE);
@@ -79,19 +91,25 @@ public class SpectrumRenderer {
 
 		canvas.drawRect(border, border, canvas.getWidth() - border, canvas.getHeight() - border, myPaint);
 
-		float delta = spectrumWidth * 2000 / rate; // (2khz wide)
+		
+		float freqdelta=(float) (freqA%scaleStep);
+		//if(freqdelta>scaleStep/2){
+		//	freqdelta=(float) (freqdelta-scaleStep);
+		//}
+		freqdelta=spectrumWidth * freqdelta/rate;
+		float delta =  (float) (spectrumWidth * scaleStep / rate); // (2khz wide)
 
 		int myRemainingSpectrumWidth = 0;
-		while (myRemainingSpectrumWidth <= spectrumWidth / 2) {
-			canvas.drawLine(border + tick / 2 + spectrumWidth / 2 - myRemainingSpectrumWidth, 0, border + tick / 2 + spectrumWidth / 2
-					- myRemainingSpectrumWidth, border, myPaint);
-			canvas.drawLine(border + tick / 2 + spectrumWidth / 2 - myRemainingSpectrumWidth, canvas.getHeight() - border, border + tick / 2
-					+ spectrumWidth / 2 - myRemainingSpectrumWidth, canvas.getHeight(), myPaint);
-
-			canvas.drawLine(border + tick / 2 + spectrumWidth / 2 + myRemainingSpectrumWidth, 0, border + tick / 2 + spectrumWidth / 2
-					+ myRemainingSpectrumWidth, border, myPaint);
-			canvas.drawLine(border + tick / 2 + spectrumWidth / 2 + myRemainingSpectrumWidth, canvas.getHeight() - border, border + tick / 2
-					+ spectrumWidth / 2 + myRemainingSpectrumWidth, canvas.getHeight(), myPaint);
+		while (myRemainingSpectrumWidth+freqdelta <= spectrumWidth / 2) {
+			float xneg=border + tick / 2 + spectrumWidth / 2 - myRemainingSpectrumWidth+freqdelta;
+			float xpoz=border + tick / 2 + spectrumWidth / 2 + myRemainingSpectrumWidth+freqdelta;
+					
+			canvas.drawLine(xneg, 0, xneg, border, myPaint);
+			canvas.drawLine(xneg, canvas.getHeight() - border, xneg, canvas.getHeight(), myPaint);
+			if(myRemainingSpectrumWidth!=0){ //if its the first one then the center is already done
+				canvas.drawLine(xpoz, 0, xpoz, border, myPaint);
+				canvas.drawLine(xpoz, canvas.getHeight() - border, xpoz, canvas.getHeight(), myPaint);
+			}
 			myRemainingSpectrumWidth += delta;
 		}
 
@@ -106,9 +124,8 @@ public class SpectrumRenderer {
 			int y = (int) (border + tick / 2) + (int) Math.floor((spectrumHigh - num) * spectrumHeight / V);
 
 			Rect bounds = new Rect();
-			myPaint.getTextBounds(Integer.toString(num), 0, Integer.toString(num).length(), bounds);
-			myPaint.setColor(Color.YELLOW);
-			canvas.drawText(Integer.toString(num), border + tick + 2, y + bounds.height() / 2, myPaint);
+			textpaint.getTextBounds(Integer.toString(num), 0, Integer.toString(num).length(), bounds);
+			canvas.drawText(Integer.toString(num), border + tick + 2, y + bounds.height() / 2, textpaint);
 
 			myPaint.setColor(Color.WHITE);
 			myPaint.setPathEffect(new DashPathEffect(new float[] { 3, 6 }, 0));
@@ -117,10 +134,17 @@ public class SpectrumRenderer {
 
 		}
 
-		myPaint.setColor(Color.YELLOW);
-		canvas.drawText(Integer.toString(rate)+" bw", border + tick + 40, border + tick + 10, myPaint);
-		canvas.drawText(Integer.toString(data.length / 2)+" bins", border + tick + 120, border + tick + 10, myPaint);
 
+		canvas.drawText(Integer.toString(rate)+" bw", border + tick + 40, border + tick + 15, textpaint);
+		canvas.drawText(Integer.toString(data.length / 2)+" bins", border + tick + 120, border + tick + 15, textpaint);
+		
+		Rect freqBounds = new Rect();
+		 DecimalFormat myFormatter = new DecimalFormat("#.###");
+	      String output = myFormatter.format(freqA);
+		myPaint.getTextBounds(output, 0, output.length(), freqBounds);
+		canvas.drawText(output, spectrumWidth/2-freqBounds.width()/2, border + tick + 15, textpaint);
+		
+		
 		// scroll down
 		waterfall.getPixels(waterfallPixels, 0, (int) waterfallWidth, 0, 0, (int) waterfallWidth, (int) waterfallHeight - 1);
 		waterfall.setPixels(waterfallPixels, 0, (int) waterfallWidth, 0, 1, (int) waterfallWidth, (int) waterfallHeight - 1);
@@ -139,7 +163,7 @@ public class SpectrumRenderer {
 
 			double power = (rfk * rfk + ifk * ifk);
 
-			int dbValue = power > 0 ? (int) (10 * Math.log10(power / (1))) : spectrumLow;
+			float dbValue = power > 0 ? (int) (10 * Math.log10(power / (1))) : spectrumLow;
 			if (min > dbValue) {
 				min = dbValue;
 			}

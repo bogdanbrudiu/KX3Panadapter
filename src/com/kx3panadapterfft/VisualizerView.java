@@ -14,7 +14,7 @@ public class VisualizerView extends View {
 	private Bitmap mCanvasBitmap;
 	private Canvas mCanvas;
 	private double[] fftData;
-	private double freqA;
+	private double freqA=14009600;
 	private double freqB;
 	private int blockSize;
 	private int rate;
@@ -49,13 +49,16 @@ public class VisualizerView extends View {
 	}
 
 	public void updateVisualizer(double[] fftData) {
-
+		if(SoundRecordAndAnalysisActivity.STEREO){
 		for (int i = 0; i < fftData.length; i++) {
 			if (i < fftData.length / 2) {
-				this.fftData[i] = fftData[i + (fftData.length / 2)];
+				this.fftData[i] = Double.isNaN(fftData[i + (fftData.length / 2)])?1:fftData[i + (fftData.length / 2)];
 			} else {
-				this.fftData[i] = fftData[i - (fftData.length / 2)];
+				this.fftData[i] = Double.isNaN(fftData[i - (fftData.length / 2)])?1:fftData[i - (fftData.length / 2)];
 			}
+		}
+		}else{
+			this.fftData=fftData;
 		}
 
 		invalidate();
@@ -79,7 +82,7 @@ public class VisualizerView extends View {
 			mCanvas = new Canvas(mCanvasBitmap);
 		}
 
-		spectrumRenderer.render(mCanvas, fftData);
+		spectrumRenderer.render(mCanvas, fftData,freqA);
 		canvas.drawBitmap(mCanvasBitmap, 0, 0, null);
 
 	}

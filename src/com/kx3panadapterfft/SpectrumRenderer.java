@@ -9,6 +9,7 @@ import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.util.Log;
 
 public class SpectrumRenderer {
 
@@ -42,7 +43,7 @@ public class SpectrumRenderer {
 
 	}
 
-	public void render(Canvas canvas, double[] data, double freqA) {
+	public void render(Canvas canvas, double[] data, double freqA, double freqB) {
 		float min = 10000;
 		float max = -10000;
 
@@ -81,9 +82,11 @@ public class SpectrumRenderer {
 		myPaint.setColor(android.graphics.Color.BLACK);
 		myPaint.setStyle(Paint.Style.FILL);
 		canvas.drawRect(spectrumTopX, spectrumTopY, spectrumBottomX, spectrumBottomY, myPaint);
-		canvas.drawRect(0, 0, border, spectrumWidth, myPaint);
-		
-
+		//myPaint.setColor(android.graphics.Color.RED);
+		canvas.drawRect(0, 0, canvas.getWidth(), border, myPaint);
+		//myPaint.setColor(android.graphics.Color.BLUE);
+		canvas.drawRect(0, canvas.getHeight()-border, canvas.getWidth(), canvas.getHeight(), myPaint);
+		//myPaint.setColor(android.graphics.Color.BLACK);
 		// plot border
 		myPaint.setColor(Color.WHITE);
 		myPaint.setStyle(Paint.Style.STROKE);
@@ -92,7 +95,7 @@ public class SpectrumRenderer {
 		canvas.drawRect(border, border, canvas.getWidth() - border, canvas.getHeight() - border, myPaint);
 
 		
-		float freqdelta=(float) (freqA%scaleStep);
+		float freqdelta=(float) ((freqA/rate)%scaleStep);
 		//if(freqdelta>scaleStep/2){
 		//	freqdelta=(float) (freqdelta-scaleStep);
 		//}
@@ -100,9 +103,9 @@ public class SpectrumRenderer {
 		float delta =  (float) (spectrumWidth * scaleStep / rate); // (2khz wide)
 
 		int myRemainingSpectrumWidth = 0;
-		while (myRemainingSpectrumWidth+freqdelta <= spectrumWidth / 2) {
-			float xneg=border + tick / 2 + spectrumWidth / 2 - myRemainingSpectrumWidth+freqdelta;
-			float xpoz=border + tick / 2 + spectrumWidth / 2 + myRemainingSpectrumWidth+freqdelta;
+		while (myRemainingSpectrumWidth <= spectrumWidth / 2) {
+			float xneg=(border + tick / 2 + spectrumWidth / 2)+freqdelta - myRemainingSpectrumWidth;
+			float xpoz=(border + tick / 2 + spectrumWidth / 2)+freqdelta + myRemainingSpectrumWidth;
 					
 			canvas.drawLine(xneg, 0, xneg, border, myPaint);
 			canvas.drawLine(xneg, canvas.getHeight() - border, xneg, canvas.getHeight(), myPaint);
@@ -140,9 +143,13 @@ public class SpectrumRenderer {
 		
 		Rect freqBounds = new Rect();
 		 DecimalFormat myFormatter = new DecimalFormat("#.###");
-	      String output = myFormatter.format(freqA);
-		myPaint.getTextBounds(output, 0, output.length(), freqBounds);
-		canvas.drawText(output, spectrumWidth/2-freqBounds.width()/2, border + tick + 15, textpaint);
+	    String outputA = myFormatter.format(freqA);
+	    String outputB = myFormatter.format(freqB);
+		myPaint.getTextBounds(outputA, 0, outputA.length(), freqBounds);
+		canvas.drawText(outputA, spectrumWidth/2-freqBounds.width()/2, border + tick + 15, textpaint);
+		
+		myPaint.getTextBounds(outputB, 0, outputB.length(), freqBounds);
+		canvas.drawText(outputB, spectrumWidth/2-freqBounds.width()/2, border + tick + 15+15, textpaint);
 		
 		
 		// scroll down
@@ -173,10 +180,15 @@ public class SpectrumRenderer {
 
 			float range = spectrumHigh - spectrumLow;
 			float offset = dbValue - spectrumLow;
-			float percent = Math.abs(offset) / range;
-
+			float percent = (Math.abs(offset) / range);
+			if(percent>1){percent=1;}
+			if(percent<0){percent=0;}
+			
 			spectrumPoints[i * 2] = spectrumTopX + i;
 			spectrumPoints[i * 2 + 1] = spectrumTopY + spectrumHeight - spectrumHeight * percent;
+			if(spectrumPoints[i * 2 + 1]<spectrumTopY){
+				 Log.d("problem", " "+percent);
+			}
 			waterfall.setPixel(i, 0, calculatePixel(dbValue));
 		}
 
@@ -192,7 +204,10 @@ public class SpectrumRenderer {
 
 		float range = waterfallHigh - waterfallLow;
 		float offset = sample - waterfallLow;
-		float percent = offset / range;
+		float percent = Math.abs(offset) / range;
+		if(percent>1){percent=1;}
+		if(percent<0){percent=0;}
+		
 		if (percent < (2.0f / 9.0f)) {
 			float local_percent = percent / (2.0f / 9.0f);
 			R = (int) ((1.0f - local_percent) * colorLowR);

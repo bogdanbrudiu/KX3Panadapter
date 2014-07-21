@@ -1,8 +1,11 @@
 package com.kx3panadapterfft;
 
 import android.app.Activity;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.os.AsyncTask;
@@ -19,7 +22,6 @@ import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.Toast;
 import android.widget.TwoLineListItem;
 
 import com.hoho.android.usbserial.driver.UsbSerialDriver;
@@ -31,17 +33,41 @@ import java.util.List;
 
 public class DeviceListActivity extends Activity {
 
-    private final String TAG = DeviceListActivity.class.getSimpleName();
+    private final static String TAG = DeviceListActivity.class.getSimpleName();
 
-    private UsbManager mUsbManager;
+    private static UsbManager mUsbManager;
     private ListView mListView;
-    private TextView mProgressBarTitle;
-    private ProgressBar mProgressBar;
+    private static TextView mProgressBarTitle;
+    private TextView mTitle;
+    private static ProgressBar mProgressBar;
 
     private static final int MESSAGE_REFRESH = 101;
     private static final long REFRESH_TIMEOUT_MILLIS = 5000;
 
-    private final Handler mHandler = new Handler() {
+    private static final String ACTION_USB_PERMISSION =
+            "com.android.example.USB_PERMISSION";
+    private final BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
+
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (ACTION_USB_PERMISSION.equals(action)) {
+                synchronized (this) {
+                    UsbDevice device = (UsbDevice)intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                    if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        if(device != null){
+                            //call method to set up device communication 
+                            Log.i("usb", "permission granted for device " + device);
+                        }
+                    } 
+                    else {
+                        Log.i("usb", "permission denied for device " + device);
+                    }
+                }
+            }
+        }
+    };   
+    
+    private final static Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
@@ -68,19 +94,28 @@ public class DeviceListActivity extends Activity {
         }
     }
 
-    private List<DeviceEntry> mEntries = new ArrayList<DeviceEntry>();
-    private ArrayAdapter<DeviceEntry> mAdapter;
-
+    private static List<DeviceEntry> mEntries = new ArrayList<DeviceEntry>();
+    private static ArrayAdapter<DeviceEntry> mAdapter;
+    private static PendingIntent mPermissionIntent;
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.devicelist);
 
+        mPermissionIntent = PendingIntent.getBroadcast(this, 0, new Intent(ACTION_USB_PERMISSION), 0);
+        IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION);
+        registerReceiver(mUsbReceiver, filter);
+        
+        mTitle = (TextView) findViewById(R.id.demoTitle);
+        
         mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
         mListView = (ListView) findViewById(R.id.deviceList);
         mProgressBar = (ProgressBar) findViewById(R.id.progressBar);
         mProgressBarTitle = (TextView) findViewById(R.id.progressBarTitle);
 
+        Intent myIntent = getIntent();
+        mTitle.setText(myIntent.getStringExtra("title"));
+        
         mAdapter = new ArrayAdapter<DeviceEntry>(this, android.R.layout.simple_expandable_list_item_2, mEntries) {
             @Override
             public View getView(int position, View convertView, ViewGroup parent) {
@@ -137,7 +172,12 @@ public class DeviceListActivity extends Activity {
             }
         });
     }
-
+    @Override
+    protected void onStop()
+    {
+        unregisterReceiver(mUsbReceiver);
+        super.onStop();
+    }
     @Override
     protected void onResume() {
         super.onResume();
@@ -150,7 +190,7 @@ public class DeviceListActivity extends Activity {
         mHandler.removeMessages(MESSAGE_REFRESH);
     }
 
-    private void refreshDeviceList() {
+    private static void refreshDeviceList() {
         showProgressBar();
 
         new AsyncTask<Void, Void, List<DeviceEntry>>() {
@@ -158,9 +198,12 @@ public class DeviceListActivity extends Activity {
             protected List<DeviceEntry> doInBackground(Void... params) {
                 Log.d(TAG, "Refreshing device list ...");
                 SystemClock.sleep(1000);
+            
+                
                 final List<DeviceEntry> result = new ArrayList<DeviceEntry>();
                 result.add(new DeviceEntry(null, null));//No Connectivity
                 for (final UsbDevice device : mUsbManager.getDeviceList().values()) {
+                	mUsbManager.requestPermission(device, mPermissionIntent);
                     final UsbSerialDriver driver = UsbSerialProber.acquire(mUsbManager, device);
                     Log.d(TAG, "Found usb device: " + device);
                     if (driver==null) {
@@ -187,18 +230,23 @@ public class DeviceListActivity extends Activity {
         }.execute((Void) null);
     }
 
-    private void showProgressBar() {
+    private static void showProgressBar() {
         mProgressBar.setVisibility(View.VISIBLE);
         mProgressBarTitle.setText(R.string.refreshing);
     }
 
-    private void hideProgressBar() {
+    private static void hideProgressBar() {
         mProgressBar.setVisibility(View.INVISIBLE);
     }
 
     private void showConsoleActivity(String usbDevice, UsbSerialDriver driver) {
-    	SoundRecordAndAnalysisActivity.usbDevice=usbDevice==null?"":usbDevice;
-    	SoundRecordAndAnalysisActivity.sDriver=driver;
+    	if(SoundRecordAndAnalysisActivity.serialUsbDevice==null){
+    	SoundRecordAndAnalysisActivity.serialUsbDevice=usbDevice==null?"":usbDevice;
+    	SoundRecordAndAnalysisActivity.serialDriver=driver;
+    	}else{
+    		SoundRecordAndAnalysisActivity.audioUsbDevice=usbDevice==null?"":usbDevice;
+        	SoundRecordAndAnalysisActivity.audioDriver=driver;
+    	}
     	 Intent intent = new Intent(this, SoundRecordAndAnalysisActivity.class);
          startActivity(intent);
          finish();

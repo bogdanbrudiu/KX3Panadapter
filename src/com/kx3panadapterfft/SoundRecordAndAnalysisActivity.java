@@ -51,12 +51,15 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 	private int blockSize = 1024;
 	private VisualizerView visualizerView;
 	
-	public static UsbSerialDriver sDriver;
-	public static String usbDevice;
+	public static UsbSerialDriver serialDriver;
+	public static String serialUsbDevice;
+
+	public static UsbSerialDriver audioDriver;
+	public static String audioUsbDevice;
 	
 	private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
 	 private SerialInputOutputManager mSerialIoManager;
-
+	 private String rest="";
 	    private final SerialInputOutputManager.Listener mListener =
 	            new SerialInputOutputManager.Listener() {
 
@@ -93,17 +96,40 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 				} catch (UnsupportedEncodingException e) {
 					 Log.e(TAG, e.getMessage());
 				}
-	        	if(str.startsWith("IF")){
-	        		final double freq=Double.parseDouble(str.substring(2, str.indexOf(' ')>0?str.indexOf(' '):str.length()));
-	        		runOnUiThread(new Runnable() {
-		        	     @Override
-		        	     public void run() {
+				str=rest+str;
+				 Log.i(TAG, str);
+				 
+				 double fa=0;
+				 double fb=0;
+				 int index=0;
+				 String[] parts=str.split(";");
+				for(String part: parts){
+		        	if(part.startsWith("FA")){
+		        		fa=Double.parseDouble(part.substring(2, part.indexOf(' ')>0?part.indexOf(' '):part.length()));
+		        	}
+		        	if(part.startsWith("FB")){
+		        		fb=Double.parseDouble(part.substring(2, part.indexOf(' ')>0?part.indexOf(' '):part.length()));
+		        	}
+		        	if(index==parts.length){
+		        		if(str.toCharArray()[str.length()]!=';'){
+		        			rest=part;
+		        		}
+		        	}
+		        	index++;
+				}
+				final double freqA=fa;
+				final double freqB=fb;
+				runOnUiThread(new Runnable() {
+	        	     @Override
+	        	     public void run() {
+	        	    	 visualizerView = (VisualizerView) findViewById(R.id.visualizerView);
+	        	    	 visualizerView.updateVisualizer(freqA,freqB);
 
-		        	    	 visualizerView.updateVisualizer(freq,0d);
-
-		        	    }
-		        	});
-	        	}
+	        	    }
+	        	});
+	        	
+	        	
+	        	
 	        	
 	        	
 	        }
@@ -159,18 +185,23 @@ public class SoundRecordAndAnalysisActivity extends Activity {
 	@Override
 	public void onStart() {
 		super.onStart();
-		if(SoundRecordAndAnalysisActivity.usbDevice==null){
+		if(SoundRecordAndAnalysisActivity.serialUsbDevice==null){
 			 final Intent intent = new Intent(this, DeviceListActivity.class);
-		     //intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_NO_HISTORY);
+			 intent.putExtra("title",getString(R.string.kx3connection));
 		     this.startActivity(intent);
 		}else{
-		
+			if(SoundRecordAndAnalysisActivity.audioUsbDevice==null){
+				 final Intent intent = new Intent(this, DeviceListActivity.class);
+				 intent.putExtra("title",getString(R.string.usbaudioconnection));
+			     this.startActivity(intent);
+			}else{
 		if (recordTask == null) {
 
 			recordTask = new RecordAudio();
 			recordTask.execute();
 
 		}
+			}
 		}
 	}
 	
@@ -178,13 +209,13 @@ public class SoundRecordAndAnalysisActivity extends Activity {
     protected void onPause() {
         super.onPause();
         stopIoManager();
-        if (sDriver != null) {
+        if (serialDriver != null) {
             try {
-                sDriver.close();
+                serialDriver.close();
             } catch (IOException e) {
                 // Ignore.
             }
-            sDriver = null;
+            serialDriver = null;
         }
         finish();
     }
@@ -192,22 +223,32 @@ public class SoundRecordAndAnalysisActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        Log.d(TAG, "Resumed, sDriver=" + sDriver);
-        if (sDriver == null) {
-            
-        } else {
+        
+      
+        
+        Log.d(TAG, "Resumed, sDriver=" + serialDriver);
+        if (serialDriver == null && serialUsbDevice!=null) {
+        	  UsbManager mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+              for (final UsbDevice device : mUsbManager.getDeviceList().values()) {
+            	  if(device.getDeviceName().equals(serialUsbDevice)){
+            		  serialDriver = UsbSerialProber.acquire(mUsbManager, device);
+            	  }
+              }
+        } 
+        
+        if (serialDriver != null) {
             try {
-                sDriver.open();
-                sDriver.setBaudRate(38400);
+                serialDriver.open();
+                serialDriver.setBaudRate(38400);
             } catch (IOException e) {
                 Log.e(TAG, "Error setting up device: " + e.getMessage(), e);
              
                 try {
-                    sDriver.close();
+                    serialDriver.close();
                 } catch (IOException e2) {
                     // Ignore.
                 }
-                sDriver = null;
+                serialDriver = null;
                 return;
             }
         }
@@ -223,13 +264,13 @@ public class SoundRecordAndAnalysisActivity extends Activity {
     }
 
     private void startIoManager() {
-        if (sDriver != null) {
+        if (serialDriver != null) {
             Log.i(TAG, "Starting io manager ..");
-            mSerialIoManager = new SerialInputOutputManager(sDriver, mListener);
+            mSerialIoManager = new SerialInputOutputManager(serialDriver, mListener);
            
             mExecutor.submit(mSerialIoManager);
             try {
-				sDriver.write("IF;".getBytes(), 1000);
+				serialDriver.write("AI2;".getBytes(), 1000);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -250,18 +291,18 @@ public class SoundRecordAndAnalysisActivity extends Activity {
     public void onSaveInstanceState(Bundle savedInstanceState) {
       super.onSaveInstanceState(savedInstanceState);
 
-      savedInstanceState.putString("usbDevice", usbDevice);
+      savedInstanceState.putString("usbDevice", serialUsbDevice);
     
     }
     @Override
     public void onRestoreInstanceState(Bundle savedInstanceState) {
       super.onRestoreInstanceState(savedInstanceState);
     
-      usbDevice = savedInstanceState.getString("usbDevice");
+      serialUsbDevice = savedInstanceState.getString("usbDevice");
       UsbManager mUsbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
       for (final UsbDevice device : mUsbManager.getDeviceList().values()) {
-    	  if(device.getDeviceName()==usbDevice){
-    		  sDriver = UsbSerialProber.acquire(mUsbManager, device);
+    	  if(device.getDeviceName().equals(serialUsbDevice)){
+    		  serialDriver = UsbSerialProber.acquire(mUsbManager, device);
     	  }
       }
     }

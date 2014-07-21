@@ -15,7 +15,7 @@ public class VisualizerView extends View {
 	private Canvas mCanvas;
 	private double[] fftData;
 	private double freqA=14009600;
-	private double freqB;
+	private double freqB=7012600;
 	private int blockSize;
 	private int rate;
 	private SpectrumRenderer spectrumRenderer;
@@ -82,7 +82,7 @@ public class VisualizerView extends View {
 			mCanvas = new Canvas(mCanvasBitmap);
 		}
 
-		spectrumRenderer.render(mCanvas, fftData,freqA);
+		spectrumRenderer.render(mCanvas, fftData,freqA, freqB);
 		canvas.drawBitmap(mCanvasBitmap, 0, 0, null);
 
 	}

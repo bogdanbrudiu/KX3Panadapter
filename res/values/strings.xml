@@ -5,4 +5,6 @@
     <string name="refreshing">Refreshing&#8230;</string>
     <string name="kx3connection">KX3 Connection</string>
     <string name="noconnectivity">No Connectivity</string>
+    <string name="usbaudioconnection">USB Audio Connection</string>
+    
 </resources>
